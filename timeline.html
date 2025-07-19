@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text-Only Interactive Timeline</title>
+    <!-- Tailwind CSS CDN for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom CSS for the Inter font and body background */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* Tailwind gray-50 */
+            color: #1e293b; /* Tailwind slate-800 */
+            line-height: 1.6;
+        }
+
+        /* Custom styles for the timeline line */
+        .timeline-line {
+            position: absolute;
+            left: 50%; /* Center the line on larger screens */
+            /* top: 0; Removed fixed top value */
+            bottom: 0;
+            width: 4px; /* Thickness of the line */
+            background-color: #a5b4fc; /* Tailwind indigo-300 */
+            transform: translateX(-50%); /* Adjust for line thickness to be perfectly centered */
+            z-index: 0; /* Ensure line is behind events */
+        }
+
+        /* Responsive adjustment for the timeline line on small screens */
+        @media (max-width: 768px) {
+            .timeline-line {
+                left: 20px; /* Move line to the left for mobile */
+                transform: translateX(0); /* No horizontal translation needed */
+            }
+        }
+
+        /* Styling for individual timeline event cards */
+        .timeline-event {
+            position: relative;
+            display: flex;
+            align-items: center;
+            margin-bottom: 3rem; /* Space between events */
+            opacity: 0; /* Initially hidden for animation */
+            /* Enhanced animation: slightly more movement and subtle scale */
+            transform: translateY(60px) scale(0.98);
+            transition: opacity 0.9s ease-out, transform 0.9s ease-out; /* Smooth animation */
+            z-index: 1; /* Ensure events are above the line */
+        }
+
+        /* Animation class for when an event is in view */
+        .timeline-event.animate-in {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+
+        /* Styling for the circle marker on the timeline */
+        .timeline-circle {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background-color: #4f46e5; /* Tailwind indigo-600 */
+            flex-shrink: 0; /* Prevent shrinking */
+            z-index: 2; /* Ensure circle is on top */
+            position: relative;
+            box-shadow: 0 0 0 4px #e0e7ff; /* Outer ring effect (indigo-100) */
+        }
+
+        /* Styling for the content box of each event */
+        .timeline-content {
+            background-color: #ffffff; /* White background */
+            padding: 1.5rem;
+            border-radius: 0.75rem; /* Rounded corners */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); /* Shadow */
+            flex-grow: 1; /* Allow content to take available space */
+            margin: 0 1.5rem; /* Space between circle and content */
+            border: 1px solid #e2e8f0; /* Light border (slate-200) */
+        }
+
+        /* Styling for the event title, making it clickable and focusable */
+        .timeline-title {
+            cursor: pointer; /* Indicate clickability */
+            font-weight: 700; /* Bold font */
+            font-size: 1.25rem; /* Text-xl */
+            color: #312e81; /* Tailwind indigo-800 */
+            margin-bottom: 0.5rem;
+            transition: color 0.2s ease-in-out;
+            outline: none; /* Remove default focus outline */
+        }
+        .timeline-title:hover,
+        .timeline-title:focus { /* Add focus style for accessibility */
+            color: #4f46e5; /* Darker indigo on hover/focus */
+            text-decoration: underline; /* Underline on focus for clarity */
+        }
+
+        /* Styling for the event description, with expand/collapse transition */
+        .timeline-description {
+            overflow: hidden; /* Hide overflowing content */
+            max-height: 0; /* Initially collapsed */
+            transition: max-height 0.6s ease-in-out; /* Smooth transition for height */
+            color: #475569; /* Tailwind slate-600 */
+        }
+        /* Class to apply when description is expanded */
+        .timeline-description.expanded {
+            max-height: 1000px; /* Sufficiently large height to show all content */
+        }
+
+        /* Layout for events on the left side of the timeline (desktop) */
+        .timeline-event.left {
+            justify-content: flex-start; /* Align content to start */
+            padding-right: calc(50% + 20px); /* Push content to left of line + circle width */
+        }
+        .timeline-event.left .timeline-content {
+            margin-right: 0; /* Remove right margin */
+            margin-left: 1.5rem; /* Add left margin */
+        }
+        .timeline-event.left .timeline-circle {
+            margin-left: calc(50% - 10px); /* Position circle on the line */
+        }
+
+        /* Layout for events on the right side of the timeline (desktop) */
+        .timeline-event.right {
+            justify-content: flex-end; /* Align content to end */
+            padding-left: calc(50% + 20px); /* Push content to right of line + circle width */
+        }
+        .timeline-event.right .timeline-content {
+            margin-left: 0; /* Remove left margin */
+            margin-right: 1.5rem; /* Add right margin */
+        }
+        .timeline-event.right .timeline-circle {
+            margin-right: calc(50% - 10px); /* Position circle on the line */
+        }
+
+        /* Mobile-first adjustments: Stack content and move line to left */
+        @media (max-width: 768px) {
+            .timeline-event {
+                flex-direction: row; /* Always row direction for mobile */
+                justify-content: flex-start; /* Align to start */
+                padding-left: 40px; /* Space for the line and circle on the left */
+                padding-right: 0; /* Remove right padding */
+            }
+            .timeline-event.left,
+            .timeline-event.right {
+                padding-left: 40px; /* Consistent padding for all on mobile */
+                padding-right: 0;
+            }
+            .timeline-event .timeline-circle {
+                position: absolute; /* Position circle absolutely */
+                left: 10px; /* Align with the mobile timeline line */
+                margin-left: 0; /* Remove desktop specific margins */
+                margin-right: 0;
+            }
+            .timeline-event .timeline-content {
+                margin-left: 1.5rem; /* Consistent left margin from circle */
+                margin-right: 0; /* Remove right margin */
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container mx-auto px-4 py-12 relative max-w-5xl">
+        <h1 class="text-4xl font-extrabold text-center mb-8 text-indigo-700">A Journey Through Time</h1>
+
+        <!-- Navigation and Search Section -->
+        <div class="mb-10 p-4 bg-white rounded-xl shadow-md border border-slate-200">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-800">Explore the Timeline</h2>
+
+            <!-- Jump to Year Buttons -->
+            <div class="mb-6">
+                <p class="text-lg font-medium mb-2 text-gray-700">Jump to Year:</p>
+                <div id="jump-nav" class="flex flex-wrap gap-2 justify-center">
+                    <!-- Buttons will be generated here by JS -->
+                </div>
+            </div>
+
+            <!-- Search Input -->
+            <div>
+                <label for="search-input" class="block text-lg font-medium mb-2 text-gray-700">Search Events:</label>
+                <input type="text" id="search-input" placeholder="e.g., Moon Landing, Berlin Wall"
+                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200">
+            </div>
+        </div>
+
+        <!-- The main vertical timeline line -->
+        <div class="timeline-line"></div>
+
+        <!-- Container for all timeline events -->
+        <div id="timeline-events">
+            <!-- Timeline events will be dynamically inserted here by JavaScript -->
+        </div>
+    </div>
+
+    <script>
+        // Data for the timeline events (media property removed)
+        const timelineData = [
+            {
+                year: "1969",
+                title: "Apollo 11 Moon Landing",
+                description: "Apollo 11 was the American spaceflight that first landed humans on the Moon. Commander Neil Armstrong and lunar module pilot Buzz Aldrin landed the Apollo Lunar Module Eagle on July 20, 1969, at 20:18 UTC, and Armstrong became the first person to step onto the Lunar surface six hours later on July 21 at 02:56 UTC. This event marked a pivotal moment in human exploration and the Space Race.",
+                category: "Space"
+            },
+            {
+                year: "1989",
+                title: "Fall of the Berlin Wall",
+                description: "The fall of the Berlin Wall on November 9, 1989, was a pivotal event in world history which marked the symbolic end of the Cold War and the reunification of Germany. For 28 years, the wall had physically and ideologically divided East and West Berlin, becoming a potent symbol of the Iron Curtain.",
+                category: "Politics"
+            },
+            {
+                year: "1991",
+                title: "Birth of the World Wide Web",
+                description: "In 1991, Tim Berners-Lee introduced the World Wide Web to the public, a system of interlinked hypertext documents accessed via the Internet. This innovation laid the foundation for modern internet browsing and revolutionized information sharing, communication, and commerce globally.",
+                category: "Technology"
+            },
+            {
+                year: "2007",
+                title: "Introduction of the iPhone",
+                description: "On January 9, 2007, Steve Jobs unveiled the original iPhone, a revolutionary device that combined a mobile phone, a widescreen iPod with touch controls, and an internet communications device. Its multi-touch interface and innovative design set a new standard for smartphones and fundamentally changed the mobile technology industry.",
+                category: "Technology"
+            },
+            {
+                year: "2012",
+                title: "Curiosity Rover Lands on Mars",
+                description: "NASA's Mars Science Laboratory (MSL) mission, carrying the Curiosity rover, successfully landed on Mars on August 6, 2012. The rover's primary mission is to assess whether Mars ever had an environment capable of supporting microbial life, search for evidence of past water, and study the planet's geology and climate.",
+                category: "Space"
+            },
+            {
+                year: "2015",
+                title: "Paris Agreement Signed",
+                description: "The Paris Agreement is a legally binding international treaty on climate change, adopted by 196 Parties at COP 21 in Paris, on 12 December 2015. Its goal is to limit global warming to well below 2, preferably to 1.5 degrees Celsius, compared to pre-industrial levels. It represents a global commitment to address climate change.",
+                category: "Politics"
+            },
+            {
+                year: "2020",
+                title: "COVID-19 Pandemic Impact",
+                description: "The year 2020 was largely defined by the global COVID-19 pandemic, caused by the SARS-CoV-2 virus. It led to widespread lockdowns, economic disruption, and a significant shift in daily life, accelerating trends in remote work, e-commerce, and digital communication. The pandemic highlighted global interconnectedness and challenges in public health.",
+                category: "Society"
+            }
+        ];
+
+        const timelineEventsContainer = document.getElementById('timeline-events');
+        const jumpNavContainer = document.getElementById('jump-nav');
+        const searchInput = document.getElementById('search-input');
+
+        let intersectionObserver; // Declare observer globally to manage it
+
+        /**
+         * Utility function to debounce a function call.
+         * Prevents a function from being called too frequently.
+         * @param {Function} func - The function to debounce.
+         * @param {number} delay - The delay in milliseconds.
+         * @returns {Function} - The debounced function.
+         */
+        function debounce(func, delay) {
+            let timeout;
+            return function(...args) {
+                const context = this;
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(context, args), delay);
+            };
+        }
+
+        /**
+         * Renders the timeline events based on the provided data array.
+         * Clears existing events before rendering.
+         * @param {Array} dataToRender - The array of event objects to render.
+         */
+        function renderTimeline(dataToRender) {
+            // Clear existing events and reset observer before rendering new ones
+            timelineEventsContainer.innerHTML = '';
+            if (intersectionObserver) {
+                intersectionObserver.disconnect(); // Disconnect previous observer
+            }
+
+            dataToRender.forEach((event, index) => {
+                const eventElement = document.createElement('div');
+                // Determine if the event should be on the left or right side for desktop view
+                const sideClass = index % 2 === 0 ? 'left' : 'right';
+                eventElement.classList.add('timeline-event', sideClass);
+                eventElement.id = `event-${event.year.replace(/\s/g, '-')}-${index}`; // Unique ID for scrolling
+
+                // Create the content HTML for each event (mediaHtml removed)
+                eventElement.innerHTML = `
+                    <div class="timeline-circle"></div>
+                    <div class="timeline-content">
+                        <div class="text-sm font-medium text-indigo-600 mb-1">${event.year}</div>
+                        <h3 class="timeline-title" tabindex="0">${event.title}</h3>
+                        <p class="timeline-description">
+                            ${event.description}
+                        </p>
+                    </div>
+                `;
+                timelineEventsContainer.appendChild(eventElement);
+
+                // Add click and keyboard listeners to the title to toggle description visibility
+                const titleElement = eventElement.querySelector('.timeline-title');
+                const descriptionElement = eventElement.querySelector('.timeline-description');
+
+                const toggleDescription = () => {
+                    descriptionElement.classList.toggle('expanded');
+                };
+
+                titleElement.addEventListener('click', toggleDescription);
+                titleElement.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault(); // Prevent default scroll behavior for spacebar
+                        toggleDescription();
+                    }
+                });
+            });
+
+            // Re-setup the intersection observer for the newly rendered elements
+            setupIntersectionObserver();
+        }
+
+        /**
+         * Creates the "Jump to Year" navigation buttons.
+         */
+        function createNavigation() {
+            jumpNavContainer.innerHTML = ''; // Clear previous buttons
+            const uniqueYears = [...new Set(timelineData.map(event => event.year))].sort(); // Get unique sorted years
+
+            uniqueYears.forEach(year => {
+                const button = document.createElement('button');
+                button.textContent = year;
+                button.classList.add('px-4', 'py-2', 'bg-indigo-500', 'text-white', 'rounded-lg', 'hover:bg-indigo-600', 'transition-colors', 'duration-200', 'focus:outline-none', 'focus:ring-2', 'focus:ring-indigo-500');
+                button.addEventListener('click', () => {
+                    // Find the first event element for that year and scroll to it
+                    const targetEvent = document.querySelector(`#timeline-events [id^="event-${year.replace(/\s/g, '-')}-"]`);
+                    if (targetEvent) {
+                        targetEvent.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                });
+                jumpNavContainer.appendChild(button);
+            });
+        }
+
+        /**
+         * Sets up the search functionality with debouncing.
+         */
+        function setupSearch() {
+            const performSearch = () => {
+                const searchTerm = searchInput.value.toLowerCase().trim();
+                let filteredData = timelineData;
+
+                if (searchTerm) {
+                    filteredData = timelineData.filter(event =>
+                        event.title.toLowerCase().includes(searchTerm) ||
+                        event.description.toLowerCase().includes(searchTerm) ||
+                        event.year.toLowerCase().includes(searchTerm) ||
+                        (event.category && event.category.toLowerCase().includes(searchTerm))
+                    );
+                }
+                renderTimeline(filteredData); // Re-render with filtered data
+            };
+
+            // Apply debounce to the input event listener
+            searchInput.addEventListener('input', debounce(performSearch, 300));
+        }
+
+        /**
+         * Sets up an Intersection Observer to animate timeline events as they scroll into view.
+         * The 'animate-in' class is added when an element becomes visible.
+         */
+        function setupIntersectionObserver() {
+            const observerOptions = {
+                root: null, // Use the viewport as the root
+                rootMargin: '0px', // No margin around the root
+                threshold: 0.1 // Trigger when 10% of the item is visible
+            };
+
+            // Disconnect any existing observer before creating a new one
+            if (intersectionObserver) {
+                intersectionObserver.disconnect();
+            }
+
+            intersectionObserver = new IntersectionObserver((entries, observer) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        // If the element is in view, add the animation class
+                        entry.target.classList.add('animate-in');
+                        // Stop observing once it has animated to save resources
+                        observer.unobserve(entry.target);
+                    }
+                });
+            }, observerOptions);
+
+            // Observe each timeline event element that is currently in the DOM
+            document.querySelectorAll('.timeline-event').forEach(event => {
+                intersectionObserver.observe(event);
+            });
+        }
+
+        // Initialize the timeline when the window loads
+        window.onload = () => {
+            renderTimeline(timelineData); // Initial render of all events
+            createNavigation(); // Create jump-to-year buttons
+            setupSearch(); // Set up search functionality
+
+            // Dynamically set the top of the timeline line
+            const timelineEventsContainer = document.getElementById('timeline-events');
+            const timelineLine = document.querySelector('.timeline-line');
+            const container = document.querySelector('.container'); // Get the main container
+
+            // Calculate the relative top position of the timeline events container within its parent
+            const relativeTop = timelineEventsContainer.getBoundingClientRect().top - container.getBoundingClientRect().top;
+
+            // Apply this calculated top position to the timeline line
+            timelineLine.style.top = relativeTop + 'px';
+        };
+    </script>
+</body>
+</html>
